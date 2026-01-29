@@ -1,4 +1,5 @@
 
+using MEDAIx.Api.Service;
 using MEDAIx.Application.Contracts.Persistence;
 using MEDAIx.Controllers;
 using MEDAIx.Persistence.Repositories;
@@ -12,6 +13,7 @@ namespace MEDAIx
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
+            builder.Services.AddHttpClient<HuggingFaceMriService>();
 
             builder.Services.AddControllers();
             builder.Services.AddHttpClient();

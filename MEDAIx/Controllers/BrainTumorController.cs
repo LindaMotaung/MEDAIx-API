@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using MEDAIx.Api.DataTransferObject;
+using MEDAIx.Api.Service;
+using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
@@ -9,9 +11,13 @@ namespace MEDAIx.Controllers
     public class BrainTumorController : ControllerBase
     {
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly HuggingFaceMriService _mriService;
+        private readonly ILogger<BrainTumorController> _logger;
 
-        public BrainTumorController(IHttpClientFactory httpClientFactory)
+        public BrainTumorController(IHttpClientFactory httpClientFactory, HuggingFaceMriService mriService, ILogger<BrainTumorController> logger)
         {
+            _mriService = mriService;
+            _logger = logger;
             _httpClientFactory = httpClientFactory;
         }
 
@@ -21,44 +27,87 @@ namespace MEDAIx.Controllers
             return true;
         }
 
-        //[HttpPost]
-        //[Consumes("multipart/form-data")]
-        //public async Task<IActionResult> BrainTumorScan([FromForm] IFormFile file) 
-        //{
-        //    if (file == null || file.Length == 0)
-        //        return BadRequest("MRI image file is required.");
+        [HttpPost("analyze")]
+        public async Task<IActionResult> AnalyzeBrainScan([FromForm] BrainTumorScanRequest request)
+        {
+            try
+            {
+                if (request.File == null || request.File.Length == 0)
+                {
+                    return BadRequest("No file uploaded");
+                }
 
-        //    // Create multipart request to ML engine
-        //    var client = _httpClientFactory.CreateClient();
+                // Validate file type
+                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
+                var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
 
-        //    using var content = new MultipartFormDataContent();
-        //    var streamContent = new StreamContent(file.OpenReadStream());
-        //    streamContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+                if (!allowedExtensions.Contains(extension))
+                {
+                    return BadRequest("Only JPG, JPEG, and PNG files are allowed");
+                }
 
-        //    // Call Python ML service
-        //    var response = await client.PostAsync(
-        //        "http://localhost:8000/predict/brain-tumor",
-        //        content
-        //    );
+                // Read file into byte array
+                byte[] imageData;
+                using (var memoryStream = new MemoryStream())
+                {
+                    await request.File.CopyToAsync(memoryStream);
+                    imageData = memoryStream.ToArray();
+                }
 
-        //    if (!response.IsSuccessStatusCode)
-        //        return StatusCode(500, "ML engine inference failed.");
+                // Call the ML service
+                var result = await _mriService.AnalyzeMriScan(imageData, request.File.FileName);
 
-        //    var predictions =
-        //        await response.Content.ReadFromJsonAsync<Dictionary<string, double>>();
+                return Ok(new
+                {
+                    success = true,
+                    fileName = request.File.FileName,
+                    prediction = result.Prediction,
+                    confidence = result.Confidence,
+                    details = result.RawResponse
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing MRI scan");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    error = ex.Message
+                });
+            }
+        }
 
-        //    if (predictions == null || predictions.Count == 0)
-        //        return StatusCode(500, "Invalid ML response.");
+        [HttpPost]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> BrainTumorScan([FromForm] BrainTumorScanRequest request)
+        {
+            var file = request.File;
+            if (file == null || file.Length == 0)
+                return BadRequest("MRI image file is required.");
 
-        //    var top = predictions.OrderByDescending(p => p.Value).First();
+            var client = _httpClientFactory.CreateClient();
 
-        //    return Ok(new
-        //    {
-        //        recommendation = MapLabel(top.Key),
-        //        confidence = Math.Round(top.Value, 3),
-        //        predictions
-        //    });
-        //}
+            using var content = new MultipartFormDataContent();
+            var streamContent = new StreamContent(file.OpenReadStream());
+            streamContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+            content.Add(streamContent, "file", file.FileName);
+
+            var response = await client.PostAsync(
+                "https://huggingface.co/spaces/KaboKableMolefe/MEDAIx-ComputerVisionML",
+                content
+            );
+
+            if (!response.IsSuccessStatusCode)
+                return StatusCode((int)response.StatusCode, "ML engine inference failed.");
+
+            var result = await response.Content.ReadAsStringAsync();
+
+            return Ok(new
+            {
+                mlResponse = result
+            });
+        }
+
 
         private static string MapLabel(string key) => key switch
         {
