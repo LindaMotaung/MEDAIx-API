@@ -2,7 +2,6 @@
 using MEDAIx.Api.Service;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 
 namespace MEDAIx.Controllers
 {
@@ -19,12 +18,6 @@ namespace MEDAIx.Controllers
             _mriService = mriService;
             _logger = logger;
             _httpClientFactory = httpClientFactory;
-        }
-
-        [HttpGet]
-        public bool SomeTest() 
-        {
-            return true;
         }
 
         [HttpPost("analyze")]
@@ -107,15 +100,5 @@ namespace MEDAIx.Controllers
                 mlResponse = result
             });
         }
-
-
-        private static string MapLabel(string key) => key switch
-        {
-            "glioma" => "Glioma",
-            "meningioma" => "Meningioma",
-            "pituitary" => "Pituitary",
-            "notumor" => "No Tumor",
-            _ => "Unknown"
-        };
     }
 }
