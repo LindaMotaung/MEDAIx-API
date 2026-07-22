@@ -1,7 +1,6 @@
-﻿using MEDAIx.Api.DataTransferObject;
+using MEDAIx.Api.DataTransferObject;
 using MEDAIx.Api.Service;
 using Microsoft.AspNetCore.Mvc;
-using System.Net.Http.Headers;
 
 namespace MEDAIx.Controllers
 {
@@ -9,15 +8,15 @@ namespace MEDAIx.Controllers
     [ApiController]
     public class BrainTumorController : ControllerBase
     {
-        private readonly IHttpClientFactory _httpClientFactory;
         private readonly HuggingFaceMriService _mriService;
         private readonly ILogger<BrainTumorController> _logger;
 
-        public BrainTumorController(IHttpClientFactory httpClientFactory, HuggingFaceMriService mriService, ILogger<BrainTumorController> logger)
+        private static readonly string[] AllowedExtensions = { ".jpg", ".jpeg", ".png" };
+
+        public BrainTumorController(HuggingFaceMriService mriService, ILogger<BrainTumorController> logger)
         {
             _mriService = mriService;
             _logger = logger;
-            _httpClientFactory = httpClientFactory;
         }
 
         [HttpPost("analyze")]
@@ -25,37 +24,49 @@ namespace MEDAIx.Controllers
         {
             try
             {
-                if (request.File == null || request.File.Length == 0)
+                // Accept either the multi-slice "Files" list (preferred - the model needs
+                // >= 3 valid slices per case or it will ABSTAIN) or a single legacy "File".
+                var uploads = (request.Files != null && request.Files.Count > 0)
+                    ? request.Files
+                    : (request.File != null ? new List<IFormFile> { request.File } : new List<IFormFile>());
+
+                if (uploads.Count == 0)
                 {
                     return BadRequest("No file uploaded");
                 }
 
-                // Validate file type
-                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
-                var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
-
-                if (!allowedExtensions.Contains(extension))
+                foreach (var upload in uploads)
                 {
-                    return BadRequest("Only JPG, JPEG, and PNG files are allowed");
+                    var extension = Path.GetExtension(upload.FileName).ToLowerInvariant();
+                    if (!AllowedExtensions.Contains(extension))
+                    {
+                        return BadRequest($"Only JPG, JPEG, and PNG files are allowed (got '{upload.FileName}')");
+                    }
                 }
 
-                // Read file into byte array
-                byte[] imageData;
-                using (var memoryStream = new MemoryStream())
+                var files = new List<(byte[] Data, string FileName)>();
+                foreach (var upload in uploads)
                 {
-                    await request.File.CopyToAsync(memoryStream);
-                    imageData = memoryStream.ToArray();
+                    using var memoryStream = new MemoryStream();
+                    await upload.CopyToAsync(memoryStream);
+                    files.Add((memoryStream.ToArray(), upload.FileName));
                 }
 
-                // Call the ML service
-                var result = await _mriService.AnalyzeMriScan(imageData, request.File.FileName);
+                var result = await _mriService.AnalyzeMriScan(files);
 
                 return Ok(new
                 {
                     success = true,
-                    fileName = request.File.FileName,
+                    status = result.Status,
+                    abstainType = result.AbstainType,
+                    abstainReason = result.AbstainReason,
                     prediction = result.Prediction,
                     confidence = result.Confidence,
+                    probabilities = result.Probabilities,
+                    validSlices = result.ValidSlices,
+                    agreeRate = result.AgreeRate,
+                    pInDomain = result.PInDomain,
+                    warnings = result.Warnings,
                     details = result.RawResponse
                 });
             }
@@ -68,37 +79,6 @@ namespace MEDAIx.Controllers
                     error = ex.Message
                 });
             }
-        }
-
-        [HttpPost]
-        [Consumes("multipart/form-data")]
-        public async Task<IActionResult> BrainTumorScan([FromForm] BrainTumorScanRequest request)
-        {
-            var file = request.File;
-            if (file == null || file.Length == 0)
-                return BadRequest("MRI image file is required.");
-
-            var client = _httpClientFactory.CreateClient();
-
-            using var content = new MultipartFormDataContent();
-            var streamContent = new StreamContent(file.OpenReadStream());
-            streamContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
-            content.Add(streamContent, "file", file.FileName);
-
-            var response = await client.PostAsync(
-                "https://huggingface.co/spaces/KaboKableMolefe/MEDAIx-ComputerVisionML",
-                content
-            );
-
-            if (!response.IsSuccessStatusCode)
-                return StatusCode((int)response.StatusCode, "ML engine inference failed.");
-
-            var result = await response.Content.ReadAsStringAsync();
-
-            return Ok(new
-            {
-                mlResponse = result
-            });
         }
     }
 }

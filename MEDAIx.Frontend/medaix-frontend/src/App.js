@@ -4,6 +4,7 @@ const CLASS_LABELS = {
   glioma: "Glioma",
   meningioma: "Meningioma",
   pituitary: "Pituitary",
+  "no tumor": "No Tumor",
   notumor: "No Tumor",
 };
 
@@ -15,30 +16,30 @@ function getHighestClass(predictions) {
 }
 
 export default function App() {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleFileChange = (e) => {
-    const f = e.target.files[0];
-    setFile(f);
-    setPreview(f ? URL.createObjectURL(f) : null);
+    const selected = Array.from(e.target.files || []);
+    setFiles(selected);
+    setPreviews(selected.map((f) => URL.createObjectURL(f)));
     setResult(null);
     setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file) return;
+    if (files.length === 0) return;
 
     setLoading(true);
     setError("");
     setResult(null);
 
     const formData = new FormData();
-    formData.append("File", file);
+    files.forEach((f) => formData.append("Files", f));
 
     try {
       const response = await fetch("https://localhost:7167/api/BrainTumor/analyze", {
@@ -46,18 +47,13 @@ export default function App() {
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to get prediction");
+      const data = await response.json();
+
+      if (!response.ok || data.success === false) {
+        throw new Error(data.error || "Failed to get prediction");
       }
 
-      const data = await response.json();
-      // Assume details is a JSON string, parse it
-      const predictions =
-        typeof data.details === "string"
-          ? JSON.parse(data.details)
-          : data.details;
-
-      setResult(predictions);
+      setResult(data);
     } catch (err) {
       setError(err.message || "Error occurred");
     } finally {
@@ -65,7 +61,10 @@ export default function App() {
     }
   };
 
-  const highest = result ? getHighestClass(result) : null;
+  const highest =
+    result && result.status === "ACCEPT" && result.probabilities
+      ? getHighestClass(result.probabilities)
+      : null;
 
   return (
     <div style={{ maxWidth: 500, margin: "40px auto", fontFamily: "sans-serif" }}>
@@ -74,21 +73,37 @@ export default function App() {
         <input
           type="file"
           accept="image/*"
+          multiple
           onChange={handleFileChange}
           style={{ marginBottom: 16 }}
         />
-        {preview && (
-          <div style={{ marginBottom: 16, textAlign: "center" }}>
-            <img
-              src={preview}
-              alt="Preview"
-              style={{ maxWidth: "100%", maxHeight: 200, borderRadius: 8 }}
-            />
+        <div style={{ fontSize: 13, color: "#666", marginBottom: 16 }}>
+          Upload all slices for one scan (at least 3 valid slices needed, or the
+          case will come back as ABSTAIN).
+        </div>
+        {previews.length > 0 && (
+          <div
+            style={{
+              marginBottom: 16,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              justifyContent: "center",
+            }}
+          >
+            {previews.map((src, i) => (
+              <img
+                key={i}
+                src={src}
+                alt={`Slice ${i + 1}`}
+                style={{ maxWidth: 100, maxHeight: 100, borderRadius: 8 }}
+              />
+            ))}
           </div>
         )}
         <button
           type="submit"
-          disabled={!file || loading}
+          disabled={files.length === 0 || loading}
           style={{
             padding: "10px 24px",
             background: "#d32f2f",
@@ -108,7 +123,27 @@ export default function App() {
           {error}
         </div>
       )}
-      {result && (
+      {result && result.status !== "ACCEPT" && (
+        <div
+          style={{
+            background: "#222",
+            color: "#fff",
+            borderRadius: 8,
+            padding: 24,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            textAlign: "center",
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>ABSTAIN{result.abstainType ? ` (${result.abstainType})` : ""}</h3>
+          <div style={{ color: "#ccc", marginBottom: 8 }}>
+            {result.abstainReason || "Model declined to give a case-level prediction."}
+          </div>
+          <div style={{ fontSize: 13, color: "#999" }}>
+            Valid slices used: {result.validSlices}
+          </div>
+        </div>
+      )}
+      {result && result.status === "ACCEPT" && result.probabilities && (
         <div
           style={{
             background: "#222",
@@ -122,7 +157,7 @@ export default function App() {
             Classification Results
           </h3>
           <ul style={{ listStyle: "none", padding: 0 }}>
-            {Object.entries(result).map(([key, value]) => (
+            {Object.entries(result.probabilities).map(([key, value]) => (
               <li
                 key={key}
                 style={{
@@ -156,6 +191,9 @@ export default function App() {
               Recommended: {CLASS_LABELS[highest.key.toLowerCase()] || highest.key}
             </div>
           )}
+          <div style={{ marginTop: 16, textAlign: "center", fontSize: 13, color: "#999" }}>
+            Agreement across slices: {(result.agreeRate * 100).toFixed(0)}% ({result.validSlices} valid slices)
+          </div>
         </div>
       )}
     </div>
