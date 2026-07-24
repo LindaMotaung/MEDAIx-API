@@ -1,3 +1,4 @@
+using System.Linq;
 using MEDAIx.Api.DataTransferObject;
 using MEDAIx.Api.Service;
 using Microsoft.AspNetCore.Mvc;
@@ -67,7 +68,12 @@ namespace MEDAIx.Controllers
                     agreeRate = result.AgreeRate,
                     pInDomain = result.PInDomain,
                     warnings = result.Warnings,
-                    details = result.RawResponse
+                    heatmaps = result.Heatmaps.Select(h => new
+                    {
+                        sliceIndex = h.SliceIndex,
+                        label = h.Label,
+                        imageBase64 = h.ImageBase64
+                    })
                 });
             }
             catch (Exception ex)

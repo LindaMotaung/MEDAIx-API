@@ -57,6 +57,7 @@ namespace MEDAIx.Api.Service
                     AgreeRate = parsed.AgreeRate,
                     PInDomain = parsed.PInDomain,
                     Warnings = parsed.Warnings ?? new List<string>(),
+                    Heatmaps = parsed.Heatmaps ?? new List<HeatmapSlice>(),
                     RawResponse = resultJson
                 };
             }
@@ -100,6 +101,23 @@ namespace MEDAIx.Api.Service
 
         [JsonPropertyName("warnings")]
         public List<string> Warnings { get; set; }
+
+        [JsonPropertyName("heatmaps")]
+        public List<HeatmapSlice> Heatmaps { get; set; }
+    }
+
+    // A CAM overlay for one slice - shows where the model's evidence for its
+    // top predicted label is concentrated on that slice.
+    public class HeatmapSlice
+    {
+        [JsonPropertyName("slice_index")]
+        public int SliceIndex { get; set; }
+
+        [JsonPropertyName("label")]
+        public string Label { get; set; }
+
+        [JsonPropertyName("image_base64")]
+        public string ImageBase64 { get; set; }
     }
 
     public class MriPredictionResult
@@ -115,6 +133,7 @@ namespace MEDAIx.Api.Service
         public double AgreeRate { get; set; }
         public double? PInDomain { get; set; }
         public List<string> Warnings { get; set; } = new();
+        public List<HeatmapSlice> Heatmaps { get; set; } = new();
         public string RawResponse { get; set; }
     }
 }
