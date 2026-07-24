@@ -68,7 +68,7 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: 500, margin: "40px auto", fontFamily: "sans-serif" }}>
-      <h2 style={{ textAlign: "center" }}>MEDAIX MRI Brain Tumor Classifier</h2>
+      <h2 style={{ textAlign: "center" }}>Solapa X — MRI Brain Tumor Classifier</h2>
       <form onSubmit={handleSubmit} style={{ marginBottom: 24 }}>
         <input
           type="file"
