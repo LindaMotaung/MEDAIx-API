@@ -31,6 +31,7 @@ namespace MEDAIx
             });
 
             builder.Services.AddScoped<IBrainTumorClassifier, BrainTumorClassifier>();
+            builder.Services.AddSingleton<AuditLogger>();
 
             var app = builder.Build();
 

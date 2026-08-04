@@ -58,6 +58,7 @@ namespace MEDAIx.Api.Service
                     PInDomain = parsed.PInDomain,
                     Warnings = parsed.Warnings ?? new List<string>(),
                     Heatmaps = parsed.Heatmaps ?? new List<HeatmapSlice>(),
+                    ModelVersion = parsed.ModelVersion ?? "unknown",
                     RawResponse = resultJson
                 };
             }
@@ -104,6 +105,9 @@ namespace MEDAIx.Api.Service
 
         [JsonPropertyName("heatmaps")]
         public List<HeatmapSlice> Heatmaps { get; set; }
+
+        [JsonPropertyName("model_version")]
+        public string ModelVersion { get; set; }
     }
 
     // A CAM overlay for one slice - shows where the model's evidence for its
@@ -134,6 +138,7 @@ namespace MEDAIx.Api.Service
         public double? PInDomain { get; set; }
         public List<string> Warnings { get; set; } = new();
         public List<HeatmapSlice> Heatmaps { get; set; } = new();
+        public string ModelVersion { get; set; }
         public string RawResponse { get; set; }
     }
 }

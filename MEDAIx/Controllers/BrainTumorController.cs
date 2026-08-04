@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Linq;
 using MEDAIx.Api.DataTransferObject;
 using MEDAIx.Api.Service;
@@ -10,24 +11,30 @@ namespace MEDAIx.Controllers
     public class BrainTumorController : ControllerBase
     {
         private readonly HuggingFaceMriService _mriService;
+        private readonly AuditLogger _auditLogger;
         private readonly ILogger<BrainTumorController> _logger;
 
         private static readonly string[] AllowedExtensions = { ".jpg", ".jpeg", ".png" };
 
-        public BrainTumorController(HuggingFaceMriService mriService, ILogger<BrainTumorController> logger)
+        public BrainTumorController(HuggingFaceMriService mriService, AuditLogger auditLogger, ILogger<BrainTumorController> logger)
         {
             _mriService = mriService;
+            _auditLogger = auditLogger;
             _logger = logger;
         }
 
         [HttpPost("analyze")]
         public async Task<IActionResult> AnalyzeBrainScan([FromForm] BrainTumorScanRequest request)
         {
+            var requestId = Guid.NewGuid().ToString();
+            var stopwatch = Stopwatch.StartNew();
+            List<IFormFile> uploads = new();
+
             try
             {
                 // Accept either the multi-slice "Files" list (preferred - the model needs
                 // >= 3 valid slices per case or it will ABSTAIN) or a single legacy "File".
-                var uploads = (request.Files != null && request.Files.Count > 0)
+                uploads = (request.Files != null && request.Files.Count > 0)
                     ? request.Files
                     : (request.File != null ? new List<IFormFile> { request.File } : new List<IFormFile>());
 
@@ -55,9 +62,29 @@ namespace MEDAIx.Controllers
 
                 var result = await _mriService.AnalyzeMriScan(files);
 
+                await _auditLogger.LogAsync(new AuditEntry
+                {
+                    RequestId = requestId,
+                    Modality = "brain-mri",
+                    FileCount = uploads.Count,
+                    FileNames = uploads.Select(u => u.FileName).ToList(),
+                    ModelVersion = result.ModelVersion,
+                    Success = true,
+                    Status = result.Status,
+                    Prediction = result.Prediction,
+                    Confidence = result.Confidence,
+                    ValidSlices = result.ValidSlices,
+                    AgreeRate = result.AgreeRate,
+                    PInDomain = result.PInDomain,
+                    AbstainType = result.AbstainType,
+                    AbstainReason = result.AbstainReason,
+                    ElapsedMs = stopwatch.ElapsedMilliseconds
+                });
+
                 return Ok(new
                 {
                     success = true,
+                    requestId,
                     status = result.Status,
                     abstainType = result.AbstainType,
                     abstainReason = result.AbstainReason,
@@ -68,6 +95,7 @@ namespace MEDAIx.Controllers
                     agreeRate = result.AgreeRate,
                     pInDomain = result.PInDomain,
                     warnings = result.Warnings,
+                    modelVersion = result.ModelVersion,
                     heatmaps = result.Heatmaps.Select(h => new
                     {
                         sliceIndex = h.SliceIndex,
@@ -79,9 +107,22 @@ namespace MEDAIx.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error analyzing MRI scan");
+
+                await _auditLogger.LogAsync(new AuditEntry
+                {
+                    RequestId = requestId,
+                    Modality = "brain-mri",
+                    FileCount = uploads.Count,
+                    FileNames = uploads.Select(u => u.FileName).ToList(),
+                    Success = false,
+                    Error = ex.Message,
+                    ElapsedMs = stopwatch.ElapsedMilliseconds
+                });
+
                 return StatusCode(500, new
                 {
                     success = false,
+                    requestId,
                     error = ex.Message
                 });
             }
