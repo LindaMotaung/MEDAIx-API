@@ -196,6 +196,46 @@ export default function App() {
           </div>
         </div>
       )}
+      {result && result.heatmaps && result.heatmaps.length > 0 && (
+        <div
+          style={{
+            background: "#222",
+            color: "#fff",
+            borderRadius: 8,
+            padding: 24,
+            marginTop: 16,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+          }}
+        >
+          <h3 style={{ marginTop: 0, marginBottom: 8, textAlign: "center" }}>
+            Where the model is looking
+          </h3>
+          <div style={{ fontSize: 12, color: "#999", textAlign: "center", marginBottom: 16 }}>
+            Per-slice evidence heatmap for each slice's top predicted label
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              justifyContent: "center",
+            }}
+          >
+            {result.heatmaps.map((h) => (
+              <div key={h.sliceIndex} style={{ textAlign: "center" }}>
+                <img
+                  src={`data:image/png;base64,${h.imageBase64}`}
+                  alt={`Slice ${h.sliceIndex} heatmap`}
+                  style={{ width: 140, height: 140, borderRadius: 8, display: "block" }}
+                />
+                <div style={{ fontSize: 12, color: "#ccc", marginTop: 4 }}>
+                  slice {h.sliceIndex}: {CLASS_LABELS[(h.label || "").toLowerCase()] || h.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
