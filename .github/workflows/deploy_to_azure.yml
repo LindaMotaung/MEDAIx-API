@@ -1,0 +1,42 @@
+name: Deploy API to Azure App Service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "MEDAIx/**"
+      - "MEDAIx.Application/**"
+      - "MEDAIx.Domain/**"
+      - "MEDAIx.Persistence/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required for OIDC login to Azure - no stored secret needed
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish
+        run: dotnet publish MEDAIx/MEDAIx.Api.csproj -c Release -o ./publish
+
+      - name: Azure login (OIDC - no secret stored)
+        uses: azure/login@v2
+        with:
+          client-id: 7a077696-b32a-4800-a3c4-6ba3ebf2fb26
+          tenant-id: 986cbd86-408b-4564-84eb-57153490c2da
+          subscription-id: e2c49e18-4064-4acf-bd6f-2f2084543f7d
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: solapax-api
+          package: ./publish
