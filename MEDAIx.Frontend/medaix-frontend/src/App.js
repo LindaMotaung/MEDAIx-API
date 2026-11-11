@@ -1,5 +1,9 @@
 import React, { useState } from "react";
 
+// Local dev talks to the .NET API running on localhost; the production build
+// (set via .env.production) talks to the real deployed API instead.
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "https://localhost:7167";
+
 const CLASS_LABELS = {
   glioma: "Glioma",
   meningioma: "Meningioma",
@@ -42,7 +46,7 @@ export default function App() {
     files.forEach((f) => formData.append("Files", f));
 
     try {
-      const response = await fetch("https://localhost:7167/api/BrainTumor/analyze", {
+      const response = await fetch(`${API_BASE_URL}/api/BrainTumor/analyze`, {
         method: "POST",
         body: formData,
       });
